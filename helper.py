@@ -70,6 +70,18 @@ def getMA(data, n):
     return ma
 
 
+def getVWAP(close, high, low, volume):
+    n = close.shape[0]
+    vwap = np.zeros(n)
+    total_vp = 0
+    total_volume = 0
+    for i in range(n, 0, -1):
+        total_vp += ((close[-i] + high[-i] + low[-i])/3) * volume[-i]
+        total_volume += volume[-i]
+        vwap[-i] = total_vp / total_volume
+    return vwap
+
+
 """
 STRATEGIES HELPER FUNCTIONS
 """
@@ -78,86 +90,127 @@ STRATEGIES HELPER FUNCTIONS
 UPTREND_BASE = 3
 EMA_PERIODS = 200
 
-def strategyMACD(close):
+def strategyMACD(symbol, n):
     """
     If the MACD line crosses above the signal line, below 0, on the latest
     candlestick, return True
     Otherwise return False
     """
-    if close.shape[0] < 40:
-        return False
-    macd, signal, _, _ = getMACD(close)
+    try:
+        close = getHistory(symbol, '1mo', '30m')['Close'].to_numpy()[:-n]
+        macd, signal, _, _ = getMACD(close)
 
-    # Check that macd has been below the signal line
-    for i in range(1, 4):
-        if macd[-i] >= 0 and signal[-i] >= 0:
+        # Check that macd has been below the signal line
+        for i in range(5, 1, -1):
+            if macd[-i] > 0 and signal[-i] > 0:
+                return False
+            if macd[-i] > signal[-i]:
+                return False
+        if macd[-1] < signal[-1]:
             return False
-        if macd[-i-1] > signal[-i-1]:
-            return False
-    if macd[-1] < signal[-1]:
+        return True
+    except:
         return False
-    return True
 
 
-def strategyEMA(close):
+def strategyEMA(symbol, n):
     """
     If stock closing price is below the EMA at any point in the last 3 candle
     sticks, then return False
     return True if it has been in an uptrend for at least 3 candlesticks
     """
-    if close.shape[0] < EMA_PERIODS + 3:
+    try:
+        close = getHistory(symbol, '1mo', '30m')['Close'].to_numpy()[:-n]
+        ema = getEMA(close, EMA_PERIODS)
+
+        for i in range(5, 0, -1):
+            if close[-i] < ema[-i]:
+                return False
+        return True
+    except:
         return False
-    ema = getEMA(close, EMA_PERIODS)
-
-    for i in range(1, UPTREND_BASE+1):
-        if close[-i] < ema[-i]:
-            return False
-    return True
 
 
-def strategyVWAP(close):
-    return False
+def strategyMA(symbol, n):
+    try:
+        close = getHistory(symbol, '5d', '5m')['Close'].to_numpy()[:-n]
+        ma = getMA(close, 200)
+        for i in range(5, 0, -1):
+            if close[-i] < ma[-i]:
+                return False
+        return True
+    except:
+        return False
+
+
+def strategyVWAP(symbol, n):
+    try:
+        close = getHistory(symbol, '5d', '5m')['Close'].to_numpy()[:-n]
+        high = getHistory(symbol, '5d', '5m')['High'].to_numpy()[:-n]
+        low = getHistory(symbol, '5d', '5m')['Low'].to_numpy()[:-n]
+        volume = getHistory(symbol, '5d', '5m')['Volume'].to_numpy()[:-n]
+        vwap = getVWAP(close, high, low, volume)
+
+        # check that the stock price is above both the vwap and the ma
+        for i in range(5, 0, -1):
+            if close[-i] < vwap[-i]:
+                return False
+        return True
+    except:
+        return False
+
+
 """
 GENERAL USE FUNCTIONS
 """
+
+def stopLosses(buyPrice, risk, n):
+    L = []
+    L.append(buyPrice * (1-risk))
+    for i in range(1,n):
+        L.append(buyPrice * (1+(risk*i)))
+    return L
+
+
+def sellSignals(buyPrice, risk, reward):
+    stop1 = buyPrice * (1 - risk)
+    stop2 = buyPrice * (1 + risk)
+    stop3 = buyPrice * (1 + reward)
+    return stop1, stop2, stop3
+
 
 def howManyShares(MoneyAvailable, buyPrice):
     return MoneyAvailable // buyPrice
 
 
-def sellSignals(numShares, buyPrice, risk, reward):
-    totalMoney = numShares * buyPrice
-    maxLoss = totalMoney * risk
-    gain =  totalMoney * reward
-
-    maxLoss_stock = maxLoss / numShares
-    gain_stock = gain / numShares
-
-    stopLoss = buyPrice - maxLoss_stock
-    stopProfit1 = buyPrice + maxLoss_stock
-    stopProfit2 = buyPrice + gain_stock
-
-    return stopLoss, stopProfit1, stopProfit2
-
-
-def buySignals(strategies, close):
-    for i in range(len(strategies)):
-        if not strategies[i](close):
+def buySignals(strategies, symbol, n):
+    for strategy in strategies:
+        if not strategy(symbol, n):
             return False
     return True
 
 
-def scanStocks(stocks, strategies, period, interval):
-    buy = np.zeros(len(stocks))
-    for i in range(len(stocks)):
-        close = getHistory(stocks[i], period, interval)['Close']
-        if close.empty or close.to_numpy() is None:
-            buy[i] = -1
-            continue
-        if buySignals(strategies, close.to_numpy()):
-            buy[i] = 1
+def scanStocks(symbols, strategies, n=0):
+    buy = np.zeros(len(symbols))
+    for i in range(len(symbols)):
+        if buySignals(strategies, symbols[i], n):
+            buy[i] += 1
     return buy
 
+
+def filterStocks(stocks, minVolume=300000, minClose=1, maxClose=100):
+    filtered = []
+    for stock in stocks:
+        try:
+            ticker = yf.Ticker(stock)
+            close = ticker.History(period=period, interval=interval, actions=False)['Close'].to_numpy()
+            if close is None:
+                continue
+            if close[-1] > 1 and close[-1] < 100 and ticker.info['averageVolume'] > minVolume:
+                filtered.append(stock)
+        except:
+            pass
+    return filtered
 
 
 def readSymbols(files=[nyse, nasdaq]):
