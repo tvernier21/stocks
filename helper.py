@@ -133,7 +133,7 @@ def strategyEMA(symbol, n):
 
 def strategyMA(symbol, n):
     try:
-        close = getHistory(symbol, '5d', '5m')['Close'].to_numpy()[:-n]
+        close = getHistory(symbol, '1mo', '5m')['Close'].to_numpy()[:-n*6]
         ma = getMA(close, 200)
         for i in range(5, 0, -1):
             if close[-i] < ma[-i]:
@@ -145,10 +145,11 @@ def strategyMA(symbol, n):
 
 def strategyVWAP(symbol, n):
     try:
-        close = getHistory(symbol, '5d', '5m')['Close'].to_numpy()[:-n]
-        high = getHistory(symbol, '5d', '5m')['High'].to_numpy()[:-n]
-        low = getHistory(symbol, '5d', '5m')['Low'].to_numpy()[:-n]
-        volume = getHistory(symbol, '5d', '5m')['Volume'].to_numpy()[:-n]
+        historical = getHistory(symbol, '1mo', '5m')
+        close = hitorical['Close'].to_numpy()[:-n*6]
+        high = historical['High'].to_numpy()[:-n*6]
+        low = historical['Low'].to_numpy()[:-n*6]
+        volume = historical['Volume'].to_numpy()[:-n*6]
         vwap = getVWAP(close, high, low, volume)
 
         # check that the stock price is above both the vwap and the ma
@@ -194,7 +195,7 @@ def scanStocks(symbols, strategies, n=0):
     buy = np.zeros(len(symbols))
     for i in range(len(symbols)):
         if buySignals(strategies, symbols[i], n):
-            buy[i] += 1
+            buy[i] = 1
     return buy
 
 
