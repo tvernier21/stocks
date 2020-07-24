@@ -199,16 +199,13 @@ def scanStocks(symbols, strategies, n=0):
     return buy
 
 
-def filterStocks(stocks, minVolume=300000, minClose=1, maxClose=100):
+def filterStocks(symbols, minVolume=300000, minClose=1, maxClose=100):
     filtered = []
-    for stock in stocks:
+    for symbol in symbols:
         try:
-            ticker = yf.Ticker(stock)
-            close = ticker.History(period=period, interval=interval, actions=False)['Close'].to_numpy()
-            if close is None:
-                continue
-            if close[-1] > 1 and close[-1] < 100 and ticker.info['averageVolume'] > minVolume:
-                filtered.append(stock)
+            info = yf.Ticker(symbol).history(period='1mo', interval='30m', actions=False)
+            if info['Close'][-1] > 1 and info['Close'][-1] < 100 and sum(info['Volume'][-10:])/10 > minVolume:
+                filtered.append(symbol)
         except:
             pass
     return filtered
@@ -226,6 +223,7 @@ def readSymbols(files=[nyse, nasdaq]):
 MACD = strategyMACD
 EMA = strategyEMA
 VWAP = strategyVWAP
+MA = strategyMA
 
 if __name__ == "__main__":
     stock = getHistory("AMD", "1mo", "30m")
