@@ -34,7 +34,7 @@ def graphStock(symbol, i):
     x = np.array(range(n))
     y0 = np.zeros(n)
 
-    fig, (plt1, plt2) = plt.subplots(2, figsize=(10, 10))
+    fig, (plt1, plt2, plt3) = plt.subplots(3, figsize=(8, 8))
     plt2.plot(x, macd, color="cyan")   # macd line
     plt2.plot(x, signal, color="orange")  # signal line
     plt2.plot(x, y0, color="black")
@@ -42,11 +42,26 @@ def graphStock(symbol, i):
     plt1.plot(x, close, color="blue")   # 12 day EMA
     plt1.plot(x, ema200, color="red")    # 26 day EMA
 
-    stopLoss, stopProfit1, stopProfit2 = helper.sellSignals(close[-i-1], RISK, REWARD)
+    stops = helper.sellSignals(close[0], RISK, REWARD)
 
-    plt1.plot(x, np.zeros(n)+stopLoss, color='orange')
-    plt1.plot(x, np.zeros(n)+stopProfit1, color='green')
-    plt1.plot(x, np.zeros(n)+stopProfit2, color='green')
+    for stop in stops:
+        plt1.plot(x, np.zeros(n)+stop, color='green')
+
+
+    stock = helper.getHistory(symbol, '1mo', '5m')
+    vwap = helper.getVWAP(stock['Close'].to_numpy(),
+                          stock['High'].to_numpy(),
+                          stock['Low'].to_numpy(),
+                          stock['Volume'].to_numpy(),
+                          stock.index)
+    ma = helper.getMA(stock.Close, 200)
+    x = np.array(range(ma.shape[0]))
+    vwap = vwap[-ma.shape[0]:]
+    closer = stock.Close.to_numpy()[-ma.shape[0]:]
+    plt3.plot(x, vwap)
+    plt3.plot(x, closer)
+    plt3.plot(x, ma)
+
 
     plt.show()
 
@@ -127,30 +142,6 @@ def save_main(money, symbols, init_price, stop_loss, new=False):
     with open(BUY, 'w') as f:
         for line in main_str:
             f.write(line+'\n')
-
-
-def startScan(files_string, risk, reward, macd, ema):
-    files = parseFiles(files_string)
-    symbols = helper.readSymbols(files)
-    params = [risk, reward, macd, ema]
-    save_symbols(symbols, params)
-    save_main([START_MONEY], [], [], [], new=True)
-
-
-def scanAll():
-    symbols, params = read_symbols()
-
-
-
-def updateBoard():
-    buy = []
-    buy_str = read()
-    if not buy_str:
-        symbols = buy_str[1].split(',')
-        prices = buy_str[2].split(',')
-        for i in range(buy_str[1]):
-            buy.append(symbols[i]+': '+prices[i])
-    return buy
 
 
 def Today():
@@ -259,9 +250,9 @@ def grapher(stock, signals):
     x = np.array(range(n))
     fig, (plt1) = plt.subplots(1, figsize=(6,6))
     plt1.plot(x, stock, color='black')
-    plt1.plot(x, np.zeros(n)+signals[0], color='red')
-    plt1.plot(x, np.zeros(n)+signals[1], color='cyan')
-    plt1.plot(x, np.zeros(n)+signals[2], color='green')
+    for s in signals:
+        plt1.plot(x, np.zeros(n)+s, color='green')
+
     plt.show()
 
 
@@ -275,12 +266,13 @@ def backTest():
     symbols = helper.readSymbols(files)
     risk = .01
     reward = .02
-    strats = [helper.MACD, helper.EMA, helper.VWAP, helper.MA]
+    # strats = [helper.MACD, helper.EMA, helper.VWAP, helper.MA]
+    strats = [helper.VWAP, helper.MA]
     # strats = [helper.MACD]
 
     # Removed old stocks
     print(len(symbols))
-    symbols = helper.filterStocks(symbols, minVolume=500000)    #default settings left alone
+    symbols = helper.filterStocks(symbols, minClose=.03, maxClose=500, minVolume=10000)    #default settings left alone
     print(len(symbols))
 
     #Scan each stock and check for win signal
@@ -288,15 +280,17 @@ def backTest():
     trades = 0
     success = 0
     total_profit = 0
-    bought = np.zeros(90)     # tracking number of trades invested at each timestamp
+    bought = np.zeros(70)     # tracking number of trades invested at each timestamp
     for symbol in symbols:
+        # graphStock(symbol, 0)
         profit = 0
-        for i in range(39, 0, -1):   # 39 is 3 days in 30m timestamps
+        for i in range(65, 0, -1):   # looking backwards 5 days
             if helper.buySignals(strats, symbol, i):
+                print('Buy')
                 bought[-i] += 1
                 # Look at the stocks closing prices in 5 min intervals from the close candle right after where we get the signal
                 close = helper.getHistory(symbol, '1mo', '5m')['Close'].to_numpy()[-i*6:]
-                numShares = helper.howManyShares(100, close[0])
+                numShares = helper.howManyShares(500, close[0])
                 stopLoss = helper.stopLosses(close[0], .01, 10)
 
                 bottom = 0

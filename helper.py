@@ -70,12 +70,15 @@ def getMA(data, n):
     return ma
 
 
-def getVWAP(close, high, low, volume):
+def getVWAP(close, high, low, volume, dates):
     n = close.shape[0]
     vwap = np.zeros(n)
     total_vp = 0
-    total_volume = 0
+    total_volume = 1
     for i in range(n, 0, -1):
+        if dates[-i].hour == 9 and dates[-i].minute == 30:
+            total_vp = 0
+            total_volume = 1
         total_vp += ((close[-i] + high[-i] + low[-i])/3) * volume[-i]
         total_volume += volume[-i]
         vwap[-i] = total_vp / total_volume
@@ -87,7 +90,7 @@ STRATEGIES HELPER FUNCTIONS
 """
 
 #STRATEGIES
-UPTREND_BASE = 3
+BASE_DAYS = 3
 EMA_PERIODS = 200
 
 def strategyMACD(symbol, n):
@@ -101,7 +104,7 @@ def strategyMACD(symbol, n):
         macd, signal, _, _ = getMACD(close)
 
         # Check that macd has been below the signal line
-        for i in range(5, 1, -1):
+        for i in range(BASE_DAYS, 1, -1):
             if macd[-i] > 0 and signal[-i] > 0:
                 return False
             if macd[-i] > signal[-i]:
@@ -123,7 +126,7 @@ def strategyEMA(symbol, n):
         close = getHistory(symbol, '1mo', '30m')['Close'].to_numpy()[:-n]
         ema = getEMA(close, EMA_PERIODS)
 
-        for i in range(5, 0, -1):
+        for i in range(BASE_DAYS, 0, -1):
             if close[-i] < ema[-i]:
                 return False
         return True
@@ -135,7 +138,7 @@ def strategyMA(symbol, n):
     try:
         close = getHistory(symbol, '1mo', '5m')['Close'].to_numpy()[:-n*6]
         ma = getMA(close, 200)
-        for i in range(5, 0, -1):
+        for i in range(BASE_DAYS, 0, -1):
             if close[-i] < ma[-i]:
                 return False
         return True
@@ -146,14 +149,15 @@ def strategyMA(symbol, n):
 def strategyVWAP(symbol, n):
     try:
         historical = getHistory(symbol, '1mo', '5m')
-        close = hitorical['Close'].to_numpy()[:-n*6]
-        high = historical['High'].to_numpy()[:-n*6]
-        low = historical['Low'].to_numpy()[:-n*6]
-        volume = historical['Volume'].to_numpy()[:-n*6]
-        vwap = getVWAP(close, high, low, volume)
+        close = hitorical.Close.to_numpy()[:-n*6]
+        high = historical.High.to_numpy()[:-n*6]
+        low = historical.Low.to_numpy()[:-n*6]
+        volume = historical.Volume.to_numpy()[:-n*6]
+        dates = historical.index[:-n*6]
+        vwap = getVWAP(close, high, low, volume, dates)
 
         # check that the stock price is above both the vwap and the ma
-        for i in range(5, 0, -1):
+        for i in range(BASE_DAYS, 0, -1):
             if close[-i] < vwap[-i]:
                 return False
         return True
